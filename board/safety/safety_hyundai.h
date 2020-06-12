@@ -23,63 +23,63 @@ const CanMsg HYUNDAI_TX_MSGS[] = {
 // TODO: missing checksum for wheel speeds message,worst failure case is
 //       wheel speeds stuck at 0 and we don't disengage on brake press
 AddrCheckStruct hyundai_rx_checks[] = {
-   {.msg = {{608, 0, 8, .check_checksum = true, .max_counter = 3U, .expected_timestep = 10000U}}},
-  // {.msg = {{902, 0, 8, .max_counter = 15U,  .expected_timestep = 10000U}}},
-   {.msg = {{916, 0, 8, .check_checksum = true, .max_counter = 7U, .expected_timestep = 10000U}}},
-  //{.msg = {{1057, 0, 8, .check_checksum = true, .max_counter = 15U, .expected_timestep = 20000U}}},
-};
+  {.msg = {{608, 0, 8, .check_checksum = true, .max_counter = 3U, .expected_timestep = 10000U}}},
+  // TODO: older hyundai models don't populate the counter bits in 902
+  //{.msg = {{902, 0, 8, .max_counter = 15U,  .expected_timestep = 10000U}}},
+  {.msg = {{902, 0, 8, .max_counter = 0U,  .expected_timestep = 10000U}}},
+  //{.msg = {{916, 0, 8, .check_checksum = true, .max_counter = 7U, .expected_timestep = 10000U}}},
+  {.msg = {{916, 0, 8, .check_checksum = false, .max_counter = 0U, .expected_timestep = 10000U}}},
+  };
 const int HYUNDAI_RX_CHECK_LEN = sizeof(hyundai_rx_checks) / sizeof(hyundai_rx_checks[0]);
 
-// static uint8_t hyundai_get_counter(CAN_FIFOMailBox_TypeDef *to_push) {
-//   int addr = GET_ADDR(to_push);
+static uint8_t hyundai_get_counter(CAN_FIFOMailBox_TypeDef *to_push) {
+  int addr = GET_ADDR(to_push);
+  uint8_t cnt;
+  if (addr == 608) {
+    cnt = (GET_BYTE(to_push, 7) >> 4) & 0x3;
+  } else if (addr == 902) {
+    cnt = ((GET_BYTE(to_push, 3) >> 6) << 2) | (GET_BYTE(to_push, 1) >> 6);
+  } else if (addr == 916) {
+    cnt = (GET_BYTE(to_push, 1) >> 5) & 0x7;
+  } else {
+    cnt = 0;
+  }
+  return cnt;
+}
 
-//   uint8_t cnt;
-//   if (addr == 608) {
-//     cnt = (GET_BYTE(to_push, 7) >> 4) & 0x3;
-//   } else if (addr == 902) {
-//     cnt = ((GET_BYTE(to_push, 3) >> 6) << 2) | (GET_BYTE(to_push, 1) >> 6);
-//   } else if (addr == 916) {
-//     cnt = (GET_BYTE(to_push, 1) >> 5) & 0x7;
-//   } else {
-//     cnt = 0;
-//   }
-//   return cnt;
-// }
+static uint8_t hyundai_get_checksum(CAN_FIFOMailBox_TypeDef *to_push) {
+  int addr = GET_ADDR(to_push);
+  uint8_t chksum;
+  if (addr == 608) {
+    chksum = GET_BYTE(to_push, 7) & 0xF;
+  } else if (addr == 916) {
+    chksum = GET_BYTE(to_push, 6) & 0xF;
+  } else {
+    chksum = 0;
+  }
+  return chksum;
+}
 
-// static uint8_t hyundai_get_checksum(CAN_FIFOMailBox_TypeDef *to_push) {
-//   int addr = GET_ADDR(to_push);
-
-//   uint8_t chksum;
-//   if (addr == 608) {
-//     chksum = GET_BYTE(to_push, 7) & 0xF;
-//   } else if (addr == 916) {
-//     chksum = GET_BYTE(to_push, 6) & 0xF;
-//   } else {
-//     chksum = 0;
-//   }
-//   return chksum;
-// }
-
-// static uint8_t hyundai_compute_checksum(CAN_FIFOMailBox_TypeDef *to_push) {
-//   int addr = GET_ADDR(to_push);
-
-//   uint8_t chksum = 0;
-//   // same algorithm, but checksum is in a different place
-//   for (int i = 0; i < 8; i++) {
-//     uint8_t b = GET_BYTE(to_push, i);
-//     if (((addr == 608) && (i == 7)) || ((addr == 916) && (i == 6)) || ((addr == 1057) && (i == 7))) {
-//       b &= (addr == 1057) ? 0x0FU : 0xF0U; // remove checksum
-//     }
-//     chksum += (b % 16U) + (b / 16U);
-//   }
-//   return (16U - (chksum %  16U)) % 16U;
-// }
+static uint8_t hyundai_compute_checksum(CAN_FIFOMailBox_TypeDef *to_push) {
+  int addr = GET_ADDR(to_push);
+  uint8_t chksum = 0;
+  // same algorithm, but checksum is in a different place
+  for (int i = 0; i < 8; i++) {
+    uint8_t b = GET_BYTE(to_push, i);
+    if (((addr == 608) && (i == 7)) || ((addr == 916) && (i == 6)) || ((addr == 1057) && (i == 7))) {
+      b &= (addr == 1057) ? 0x0FU : 0xF0U; // remove checksum
+    }
+    chksum += (b % 16U) + (b / 16U);
+  }
+  return (16U - (chksum %  16U)) % 16U;
+}
 
 static int hyundai_rx_hook(CAN_FIFOMailBox_TypeDef *to_push) {
 
-  bool valid = addr_safety_check(to_push, hyundai_rx_checks, HYUNDAI_RX_CHECK_LEN,NULL, NULL, NULL);
-
-  // bool unsafe_allow_gas = unsafe_mode & UNSAFE_DISABLE_DISENGAGE_ON_GAS;
+  bool valid = addr_safety_check(to_push, hyundai_rx_checks, HYUNDAI_RX_CHECK_LEN,
+                                 hyundai_get_checksum, hyundai_compute_checksum,
+                                 hyundai_get_counter);
+  bool unsafe_allow_gas = unsafe_mode & UNSAFE_DISABLE_DISENGAGE_ON_GAS;
 
   if (valid && (GET_BUS(to_push) == 0)) {
     int addr = GET_ADDR(to_push);
@@ -103,17 +103,17 @@ static int hyundai_rx_hook(CAN_FIFOMailBox_TypeDef *to_push) {
     //   cruise_engaged_prev = cruise_engaged;
     // }
 
-    // if (addr == 871 ) {
-    //   // first byte
-    //   int cruise_engaged = (GET_BYTES_04(to_push) & 0xFF);
-    //   if (cruise_engaged && !cruise_engaged_prev) {
-    //     controls_allowed = 1;
-    //   }
-    //   if (!cruise_engaged) {
-    //     controls_allowed = 0;
-    //   }
-    //   cruise_engaged_prev = cruise_engaged;
-    // }
+    if (addr == 871 ) {
+      // first byte
+      int cruise_engaged = (GET_BYTES_04(to_push) & 0xFF);
+      if (cruise_engaged && !cruise_engaged_prev) {
+        controls_allowed = 1;
+      }
+      if (!cruise_engaged) {
+        controls_allowed = 0;
+      }
+      cruise_engaged_prev = cruise_engaged;
+    }
 
     if (addr == 608) {
       // bit 25
@@ -122,33 +122,29 @@ static int hyundai_rx_hook(CAN_FIFOMailBox_TypeDef *to_push) {
         controls_allowed = 1;
       }
       if (!cruise_engaged) {
-        controls_allowed = 1;
+        controls_allowed = 0;
       }
       cruise_engaged_prev = cruise_engaged;
     }
 
-    // // exit controls on rising edge of gas press
-    // if (addr == 608) {
-    //   bool gas_pressed = (GET_BYTE(to_push, 7) >> 6) != 0;
-    //   if (!unsafe_allow_gas && gas_pressed && !gas_pressed_prev) {
-    //     controls_allowed = 0;
-    //   }
-    //   gas_pressed_prev = gas_pressed;
-    // }
+    // exit controls on rising edge of gas press
+    if (addr == 608) {
+      bool gas_pressed = (GET_BYTE(to_push, 7) >> 6) != 0;
+      if (!unsafe_allow_gas && gas_pressed && !gas_pressed_prev) {
+        controls_allowed = 0;
+      }
+      gas_pressed_prev = gas_pressed;
+    }
 
     // sample subaru wheel speed, averaging opposite corners
-    // if (addr == 902) {
-    //   int hyundai_speed = GET_BYTES_04(to_push) & 0x3FFF;  // FL
-    //   hyundai_speed += (GET_BYTES_48(to_push) >> 16) & 0x3FFF;  // RL
-    //   hyundai_speed /= 2;
-    //   vehicle_moving = hyundai_speed > HYUNDAI_STANDSTILL_THRSLD;
-    // }
+    if (addr == 902) {
+      int hyundai_speed = GET_BYTES_04(to_push) & 0x3FFF;  // FL
+      hyundai_speed += (GET_BYTES_48(to_push) >> 16) & 0x3FFF;  // RL
+      hyundai_speed /= 2;
+      vehicle_moving = hyundai_speed > HYUNDAI_STANDSTILL_THRSLD;
+    }
 
     // exit controls on rising edge of brake press
-
-    /* I believe this was misfiring during acc requests
-    DONT use this unless you're testing this fact
-    */
 
     if (addr == 916) {
       brake_pressed = (GET_BYTE(to_push, 6) >> 7) != 0;
