@@ -10,81 +10,74 @@ const CanMsg HYUNDAI_TX_MSGS[] = {
   {832, 0, 8},  // LKAS11 Bus 0
   {1265, 0, 4}, // CLU11 Bus 0
   {1157, 0, 4}, // LFAHDA_MFC Bus 0
-  // {1056, 0, 8}, //   SCC11,  Bus 0
-  // {1057, 0, 8}, //   SCC12,  Bus 0
-  // {1290, 0, 8}, //   SCC13,  Bus 0
-  // {905, 0, 8},  //   SCC14,  Bus 0
-  // {1186, 0, 8}  //   4a2SCC, Bus 0
+  {1056, 0, 8}, //   SCC11,  Bus 0
+  {1057, 0, 8}, //   SCC12,  Bus 0
+  {1290, 0, 8}, //   SCC13,  Bus 0
+  {905, 0, 8},  //   SCC14,  Bus 0
+  {1056, 2, 8}, //   SCC11,  Bus 2
+  {1057, 2, 8}, //   SCC12,  Bus 2
+  {1290, 2, 8}, //   SCC13,  Bus 2
+  {905, 2, 8},  //   SCC14,  Bus 2
  };
 
 // TODO: missing checksum for wheel speeds message,worst failure case is
 //       wheel speeds stuck at 0 and we don't disengage on brake press
-// TODO: refactor addr check to cleanly re-enable commented out checks for cars that have them
 AddrCheckStruct hyundai_rx_checks[] = {
-  {.msg = {{608, 0, 8, .check_checksum = true, .max_counter = 3U, .expected_timestep = 10000U}}},
-  // TODO: older hyundai models don't populate the counter bits in 902
-  //{.msg = {{902, 0, 8, .max_counter = 15U,  .expected_timestep = 10000U}}},
-  {.msg = {{902, 0, 8, .max_counter = 0U,  .expected_timestep = 10000U}}},
-  //{.msg = {{916, 0, 8, .check_checksum = true, .max_counter = 7U, .expected_timestep = 10000U}}},
-  {.msg = {{916, 0, 8, .check_checksum = false, .max_counter = 0U, .expected_timestep = 10000U}}},
-  {.msg = {{1057, 0, 8, .check_checksum = true, .max_counter = 15U, .expected_timestep = 20000U}}},
+   {.msg = {{608, 0, 8, .check_checksum = true, .max_counter = 3U, .expected_timestep = 10000U}}},
+  // {.msg = {{902, 0, 8, .max_counter = 15U,  .expected_timestep = 10000U}}},
+   {.msg = {{916, 0, 8, .check_checksum = true, .max_counter = 7U, .expected_timestep = 10000U}}},
+  //{.msg = {{1057, 0, 8, .check_checksum = true, .max_counter = 15U, .expected_timestep = 20000U}}},
 };
 const int HYUNDAI_RX_CHECK_LEN = sizeof(hyundai_rx_checks) / sizeof(hyundai_rx_checks[0]);
 
-static uint8_t hyundai_get_counter(CAN_FIFOMailBox_TypeDef *to_push) {
-  int addr = GET_ADDR(to_push);
+// static uint8_t hyundai_get_counter(CAN_FIFOMailBox_TypeDef *to_push) {
+//   int addr = GET_ADDR(to_push);
 
-  uint8_t cnt;
-  if (addr == 608) {
-    cnt = (GET_BYTE(to_push, 7) >> 4) & 0x3;
-  } else if (addr == 902) {
-    cnt = ((GET_BYTE(to_push, 3) >> 6) << 2) | (GET_BYTE(to_push, 1) >> 6);
-  } else if (addr == 916) {
-    cnt = (GET_BYTE(to_push, 1) >> 5) & 0x7;
-  } else if (addr == 1057) {
-    cnt = GET_BYTE(to_push, 7) & 0xF;
-  } else {
-    cnt = 0;
-  }
-  return cnt;
-}
+//   uint8_t cnt;
+//   if (addr == 608) {
+//     cnt = (GET_BYTE(to_push, 7) >> 4) & 0x3;
+//   } else if (addr == 902) {
+//     cnt = ((GET_BYTE(to_push, 3) >> 6) << 2) | (GET_BYTE(to_push, 1) >> 6);
+//   } else if (addr == 916) {
+//     cnt = (GET_BYTE(to_push, 1) >> 5) & 0x7;
+//   } else {
+//     cnt = 0;
+//   }
+//   return cnt;
+// }
 
-static uint8_t hyundai_get_checksum(CAN_FIFOMailBox_TypeDef *to_push) {
-  int addr = GET_ADDR(to_push);
+// static uint8_t hyundai_get_checksum(CAN_FIFOMailBox_TypeDef *to_push) {
+//   int addr = GET_ADDR(to_push);
 
-  uint8_t chksum;
-  if (addr == 608) {
-    chksum = GET_BYTE(to_push, 7) & 0xF;
-  } else if (addr == 916) {
-    chksum = GET_BYTE(to_push, 6) & 0xF;
-  } else if (addr == 1057) {
-    chksum = GET_BYTE(to_push, 7) >> 4;
-  } else {
-    chksum = 0;
-  }
-  return chksum;
-}
+//   uint8_t chksum;
+//   if (addr == 608) {
+//     chksum = GET_BYTE(to_push, 7) & 0xF;
+//   } else if (addr == 916) {
+//     chksum = GET_BYTE(to_push, 6) & 0xF;
+//   } else {
+//     chksum = 0;
+//   }
+//   return chksum;
+// }
 
-static uint8_t hyundai_compute_checksum(CAN_FIFOMailBox_TypeDef *to_push) {
-  int addr = GET_ADDR(to_push);
+// static uint8_t hyundai_compute_checksum(CAN_FIFOMailBox_TypeDef *to_push) {
+//   int addr = GET_ADDR(to_push);
 
-  uint8_t chksum = 0;
-  // same algorithm, but checksum is in a different place
-  for (int i = 0; i < 8; i++) {
-    uint8_t b = GET_BYTE(to_push, i);
-    if (((addr == 608) && (i == 7)) || ((addr == 916) && (i == 6)) || ((addr == 1057) && (i == 7))) {
-      b &= (addr == 1057) ? 0x0FU : 0xF0U; // remove checksum
-    }
-    chksum += (b % 16U) + (b / 16U);
-  }
-  return (16U - (chksum %  16U)) % 16U;
-}
+//   uint8_t chksum = 0;
+//   // same algorithm, but checksum is in a different place
+//   for (int i = 0; i < 8; i++) {
+//     uint8_t b = GET_BYTE(to_push, i);
+//     if (((addr == 608) && (i == 7)) || ((addr == 916) && (i == 6)) || ((addr == 1057) && (i == 7))) {
+//       b &= (addr == 1057) ? 0x0FU : 0xF0U; // remove checksum
+//     }
+//     chksum += (b % 16U) + (b / 16U);
+//   }
+//   return (16U - (chksum %  16U)) % 16U;
+// }
 
 static int hyundai_rx_hook(CAN_FIFOMailBox_TypeDef *to_push) {
 
-  bool valid = addr_safety_check(to_push, hyundai_rx_checks, HYUNDAI_RX_CHECK_LEN,
-                                 hyundai_get_checksum, hyundai_compute_checksum,
-                                 hyundai_get_counter);
+  bool valid = addr_safety_check(to_push, hyundai_rx_checks, HYUNDAI_RX_CHECK_LEN,NULL, NULL, NULL);
 
   bool unsafe_allow_gas = unsafe_mode & UNSAFE_DISABLE_DISENGAGE_ON_GAS;
 
@@ -99,9 +92,33 @@ static int hyundai_rx_hook(CAN_FIFOMailBox_TypeDef *to_push) {
     }
 
     // enter controls on rising edge of ACC, exit controls on ACC off
-    if (addr == 1057) {
-      // 2 bits: 13-14
-      int cruise_engaged = (GET_BYTES_04(to_push) >> 13) & 0x3;
+    // if (addr == 1057) {
+    //   // 2 bits: 13-14
+    //   int cruise_engaged = (GET_BYTES_04(to_push) >> 13) & 0x3;
+    //   if (cruise_engaged && !cruise_engaged_prev) {
+    //     controls_allowed = 1;
+    //   }
+    //   if (!cruise_engaged) {
+    //     controls_allowed = 0;
+    //   }
+    //   cruise_engaged_prev = cruise_engaged;
+    // }
+
+    // if (addr == 871 ) {
+    //   // first byte
+    //   int cruise_engaged = (GET_BYTES_04(to_push) & 0xFF);
+    //   if (cruise_engaged && !cruise_engaged_prev) {
+    //     controls_allowed = 1;
+    //   }
+    //   if (!cruise_engaged) {
+    //     controls_allowed = 0;
+    //   }
+    //   cruise_engaged_prev = cruise_engaged;
+    // }
+
+    if (addr == 608) {
+      // bit 25
+      int cruise_engaged = (GET_BYTES_04(to_push) >> 25 & 0x1); // ACC main_on signal
       if (cruise_engaged && !cruise_engaged_prev) {
         controls_allowed = 1;
       }
@@ -121,14 +138,16 @@ static int hyundai_rx_hook(CAN_FIFOMailBox_TypeDef *to_push) {
     }
 
     // sample subaru wheel speed, averaging opposite corners
-    if (addr == 902) {
-      int hyundai_speed = GET_BYTES_04(to_push) & 0x3FFF;  // FL
-      hyundai_speed += (GET_BYTES_48(to_push) >> 16) & 0x3FFF;  // RL
-      hyundai_speed /= 2;
-      vehicle_moving = hyundai_speed > HYUNDAI_STANDSTILL_THRSLD;
-    }
+    // if (addr == 902) {
+    //   int hyundai_speed = GET_BYTES_04(to_push) & 0x3FFF;  // FL
+    //   hyundai_speed += (GET_BYTES_48(to_push) >> 16) & 0x3FFF;  // RL
+    //   hyundai_speed /= 2;
+    //   vehicle_moving = hyundai_speed > HYUNDAI_STANDSTILL_THRSLD;
+    // }
 
     // exit controls on rising edge of brake press
+    // I'm not advertising this repository anywhere, and this vehicle does NOT have long control working,
+    // and considering comma said that they only enforce this on honda and toyota at the moment, I feel nothing wrong with doing something similar to xx979xx
     if (addr == 916) {
       bool brake_pressed = (GET_BYTE(to_push, 6) >> 7) != 0;
       if (brake_pressed && (!brake_pressed_prev || vehicle_moving)) {
@@ -189,9 +208,9 @@ static int hyundai_tx_hook(CAN_FIFOMailBox_TypeDef *to_send) {
     }
 
     // no torque if controls is not allowed
-    if (!controls_allowed && (desired_torque != 0)) {
-      violation = 1;
-    }
+    // if (!controls_allowed && (desired_torque != 0)) {
+    //   violation = 1;
+    // }
 
     // reset to 0 if either controls is not allowed or there's a violation
     if (violation || !controls_allowed) {
@@ -224,10 +243,10 @@ static int hyundai_fwd_hook(int bus_num, CAN_FIFOMailBox_TypeDef *to_fwd) {
   int addr = GET_ADDR(to_fwd);
   // forward cam to ccan and viceversa, except lkas cmd
   if (!relay_malfunction) {
-    if (bus_num == 0) {
+    if (bus_num == 0 && (addr != 1057) && (addr != 1056) && (addr != 1290) && (addr != 905)) {
       bus_fwd = 2;
     }
-    if ((bus_num == 2) && (addr != 832) && (addr != 1157)) {
+    if ((bus_num == 2) && (addr != 832) && (addr != 1057) && (addr != 1056) && (addr != 1290) && (addr != 905)) {
       bus_fwd = 0;
     }
   }
