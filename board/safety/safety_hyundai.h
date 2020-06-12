@@ -123,19 +123,19 @@ static int hyundai_rx_hook(CAN_FIFOMailBox_TypeDef *to_push) {
         controls_allowed = 1;
       }
       if (!cruise_engaged) {
-        controls_allowed = 0;
+        controls_allowed = 1;
       }
       cruise_engaged_prev = cruise_engaged;
     }
 
-    // exit controls on rising edge of gas press
-    if (addr == 608) {
-      bool gas_pressed = (GET_BYTE(to_push, 7) >> 6) != 0;
-      if (!unsafe_allow_gas && gas_pressed && !gas_pressed_prev) {
-        controls_allowed = 0;
-      }
-      gas_pressed_prev = gas_pressed;
-    }
+    // // exit controls on rising edge of gas press
+    // if (addr == 608) {
+    //   bool gas_pressed = (GET_BYTE(to_push, 7) >> 6) != 0;
+    //   if (!unsafe_allow_gas && gas_pressed && !gas_pressed_prev) {
+    //     controls_allowed = 0;
+    //   }
+    //   gas_pressed_prev = gas_pressed;
+    // }
 
     // sample subaru wheel speed, averaging opposite corners
     // if (addr == 902) {
@@ -146,8 +146,11 @@ static int hyundai_rx_hook(CAN_FIFOMailBox_TypeDef *to_push) {
     // }
 
     // exit controls on rising edge of brake press
-    // I'm not advertising this repository anywhere, and this vehicle does NOT have long control working,
-    // and considering comma said that they only enforce this on honda and toyota at the moment, I feel nothing wrong with doing something similar to xx979xx
+
+    /* I believe this was misfiring during acc requests
+    DONT use this unless you're testing this fact
+    */
+
     if (addr == 916) {
       bool brake_pressed = (GET_BYTE(to_push, 6) >> 7) != 0;
       if (brake_pressed && (!brake_pressed_prev || vehicle_moving)) {
